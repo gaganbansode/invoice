@@ -1,149 +1,483 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-    <title>Invoice Generator</title>
-    <style>
-        body { font-family: Arial; padding: 20px; }
-        input { padding: 8px; margin: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        #btn { padding: 10px 15px; background: black; color: white; border: none; cursor: pointer; margin-top: 20px; }
-        .delete-btn { color: red; cursor: pointer; font-weight: bold; }
-        .edit-btn { color: blue; cursor: pointer; font-weight: bold; }
-    </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Simple Billing & WhatsApp Invoice (No API)</title>
+
+<!-- jsPDF and html2canvas from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+  :root{--accent:#0b5ed7;--muted:#666;}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; margin:18px; background:#f6f7fb; color:#111;}
+  h1{font-size:20px;margin:0 0 12px}
+  .app{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 420px;gap:20px;}
+  .card{background:#fff;border-radius:8px;padding:14px;box-shadow:0 6px 18px rgba(10,10,10,0.06);}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  input[type="text"], input[type="number"], select{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-size:14px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px;text-align:left;border-bottom:1px solid #eee;font-size:14px}
+  .row{display:flex;gap:10px}
+  .btn{display:inline-block;padding:8px 12px;border-radius:6px;background:var(--accent);color:#fff;text-decoration:none;border:none;cursor:pointer}
+  .btn.ghost{background:#fff;color:var(--accent);border:1px solid #d6e4ff}
+  .small{font-size:13px}
+  .muted{color:var(--muted);font-size:13px}
+  .invoice-preview{background:#fff;padding:12px;border-radius:6px}
+  .totals{margin-top:10px}
+  .right{text-align:right}
+  .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .item-row input{width:100%}
+  .flex-between{display:flex;justify-content:space-between;align-items:center}
+  .preview-area{overflow:auto}
+  @media (max-width:980px){ .app{grid-template-columns:1fr; } }
+</style>
 </head>
 <body>
 
-<h2 id="shopName">Technogan Web Services</h2>
+<h1>Billing / Invoice App — Share on WhatsApp (No API)</h1>
+<div class="app">
+  <!-- Left: Builder -->
+  <div class="card">
+    <div class="flex-between">
+      <div>
+        <strong>Create Invoice</strong>
+        <div class="muted small">Fast billing + PDF + WhatsApp sharing</div>
+      </div>
+      <div class="muted small">Date: <span id="invDate"></span></div>
+    </div>
 
-<h3>Customer Details</h3>
-<input type="text" id="custName" placeholder="Customer Name">
-<input type="text" id="custMobile" placeholder="Mobile Number">
+    <hr style="margin:12px 0"/>
 
-<h4>Invoice No: <span id="invoiceNo"></span></h4>
-<h4>Date: <span id="invoiceDate"></span></h4>
+    <div style="margin-bottom:8px">
+      <label>Customer Name</label>
+      <input id="custName" type="text" placeholder="Customer name (optional)">
+    </div>
 
-<hr>
+    <div style="margin-bottom:8px">
+      <label>Phone (for WhatsApp share)</label>
+      <input id="custPhone" type="text" placeholder="e.g. 919876543210 or leave empty for manual share">
+      <div class="small muted">If phone provided, fallback WhatsApp link will open chat with this number.</div>
+    </div>
 
-<input type="text" id="itemName" placeholder="Item Name">
-<input type="number" id="itemQty" placeholder="Qty">
-<input type="number" id="itemPrice" placeholder="Price">
+    <div style="margin-bottom:8px">
+      <label>Invoice / Order No</label>
+      <input id="invNo" type="text" placeholder="Auto or type manually">
+    </div>
 
-<button onclick="addItem()">Add</button>
+    <hr/>
 
-<table id="invoiceTable">
-    <tr>
-        <th>Item</th>
-        <th>Qty</th>
-        <th>Price</th>
-        <th>Total</th>
-        <th>Edit</th>
-        <th>Delete</th>
-    </tr>
-</table>
+    <!-- Items -->
+    <div>
+      <strong>Items</strong>
+      <table id="itemsTable">
+        <thead>
+          <tr><th style="width:42%">Item</th><th style="width:14%">Qty</th><th style="width:18%">Rate (₹)</th><th style="width:18%">Amount (₹)</th><th></th></tr>
+        </thead>
+        <tbody id="itemsBody"></tbody>
+      </table>
+      <div style="margin-top:8px;" class="row">
+        <input id="newItemName" type="text" placeholder="Item name (e.g., Black Tee - M)">
+        <input id="newItemQty" type="number" min="1" value="1" style="width:80px">
+        <input id="newItemRate" type="number" min="0" value="350" style="width:110px">
+        <button class="btn" id="addItemBtn">Add</button>
+      </div>
+    </div>
 
-<h3>Grand Total: ₹ <span id="grandTotal">0</span></h3>
-<h4>Total (in words): <span id="totalWords"></span></h4>
+    <hr/>
 
-<button id="btn" onclick="shareWhatsApp()">Share on WhatsApp</button>
+    <div class="row" style="gap:12px">
+      <div style="flex:1">
+        <label>Discount (₹)</label>
+        <input id="discount" type="number" min="0" value="0">
+      </div>
+      <div style="width:180px">
+        <label>GST (%)</label>
+        <input id="gst" type="number" min="0" value="0">
+      </div>
+    </div>
+
+    <div class="totals">
+      <div class="row" style="gap:12px">
+        <div style="flex:1"><label>Subtotal</label><div id="subtotalText">₹0</div></div>
+        <div style="width:160px"><label>GST Amount</label><div id="gstText">₹0</div></div>
+        <div style="width:160px"><label>Grand Total</label><div id="grandTotalText"><strong>₹0</strong></div></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="previewBtn">Preview Invoice</button>
+      <button class="btn ghost" id="clearBtn">Clear Items</button>
+    </div>
+  </div>
+
+  <!-- Right: Preview & Share -->
+  <div class="card">
+    <div class="flex-between">
+      <strong>Invoice Preview</strong>
+      <div class="muted small">Use Share / Download</div>
+    </div>
+
+    <div style="margin-top:12px" class="invoice-preview preview-area" id="invoicePreviewWrap">
+      <!-- Invoice will be rendered here -->
+      <div id="invoiceContent" style="min-height:220px; padding:12px">
+        <div style="text-align:center;margin-bottom:8px">
+          <div style="font-weight:700;font-size:18px">Your Brand / Stall Name</div>
+          <div class="muted small">Dadar — 6th December • Premium 180 GSM Tees</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+          <div>
+            <div class="small muted">Customer</div>
+            <div id="p_custName">-</div>
+            <div id="p_custPhone" class="muted small">-</div>
+          </div>
+          <div class="right">
+            <div class="small muted">Invoice</div>
+            <div id="p_invNo">-</div>
+            <div class="muted small" id="p_date">-</div>
+          </div>
+        </div>
+
+        <table style="width:100%;border:0;margin-top:6px">
+          <thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th></tr></thead>
+          <tbody id="p_items"></tbody>
+        </table>
+
+        <div style="margin-top:8px">
+          <div style="display:flex;justify-content:flex-end;">
+            <div style="width:320px">
+              <div style="display:flex;justify-content:space-between"><div class="muted">Subtotal</div><div id="p_subtotal">₹0</div></div>
+              <div style="display:flex;justify-content:space-between"><div class="muted">Discount</div><div id="p_discount">₹0</div></div>
+              <div style="display:flex;justify-content:space-between"><div class="muted">GST</div><div id="p_gstAmount">₹0</div></div>
+              <hr/>
+              <div style="display:flex;justify-content:space-between;font-weight:700"><div>Grand Total</div><div id="p_grandTotal">₹0</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;font-size:13px" class="muted">Payment: UPI / Cash • Free size exchange (same day)</div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px" class="row">
+      <button class="btn" id="genPdfBtn">Generate & Download PDF</button>
+      <button class="btn" id="shareBtn">Share PDF to WhatsApp (Mobile)</button>
+      <button class="btn ghost" id="waTextBtn">Open WhatsApp Text (Fallback)</button>
+    </div>
+
+    <div style="margin-top:12px" class="muted small">
+      Notes:
+      <ul>
+        <li>Web Share API (share files) works best on Android Chrome / supported mobile browsers.</li>
+        <li>If share fails, click "Open WhatsApp Text" to open chat with prefilled invoice details (manual attach required).</li>
+      </ul>
+    </div>
+  </div>
+</div>
 
 <script>
-let grand = 0;
+(() => {
+  // Simple state
+  const state = {
+    items: [],
+    invNo: '',
+    custName: '',
+    custPhone: '',
+    discount: 0,
+    gst: 0
+  };
 
-// Invoice number + date
-document.getElementById("invoiceNo").innerText = Math.floor(Math.random()*90000+10000);
-document.getElementById("invoiceDate").innerText = new Date().toLocaleDateString();
+  // Elements
+  const invDateEl = document.getElementById('invDate');
+  const itemsBody = document.getElementById('itemsBody');
+  const newItemName = document.getElementById('newItemName');
+  const newItemQty = document.getElementById('newItemQty');
+  const newItemRate = document.getElementById('newItemRate');
+  const addItemBtn = document.getElementById('addItemBtn');
+  const discountEl = document.getElementById('discount');
+  const gstEl = document.getElementById('gst');
+  const previewBtn = document.getElementById('previewBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const genPdfBtn = document.getElementById('genPdfBtn');
+  const shareBtn = document.getElementById('shareBtn');
+  const waTextBtn = document.getElementById('waTextBtn');
 
-function addItem() {
-    let name = document.getElementById("itemName").value;
-    let qty = document.getElementById("itemQty").value;
-    let price = document.getElementById("itemPrice").value;
+  const p_custName = document.getElementById('p_custName');
+  const p_custPhone = document.getElementById('p_custPhone');
+  const p_invNo = document.getElementById('p_invNo');
+  const p_date = document.getElementById('p_date');
+  const p_items = document.getElementById('p_items');
+  const p_subtotal = document.getElementById('p_subtotal');
+  const p_discount = document.getElementById('p_discount');
+  const p_gstAmount = document.getElementById('p_gstAmount');
+  const p_grandTotal = document.getElementById('p_grandTotal');
+  const subtotalText = document.getElementById('subtotalText');
+  const gstText = document.getElementById('gstText');
+  const grandTotalText = document.getElementById('grandTotalText');
 
-    if (!name || !qty || !price) {
-        alert("Please fill all fields");
-        return;
+  const invNoInput = document.getElementById('invNo');
+  const custNameInput = document.getElementById('custName');
+  const custPhoneInput = document.getElementById('custPhone');
+
+  // initialize date and invoice number
+  function formatDate(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${day}-${m}-${y}`;
+  }
+  const today = new Date();
+  invDateEl.innerText = formatDate(today);
+  p_date.innerText = formatDate(today);
+  invNoInput.value = 'INV' + String(Date.now()).slice(-6);
+
+  // helpers: arithmetic safe (digit-by-digit)
+  function toNumber(v){
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function calcTotals(){
+    let subtotal = 0;
+    for(const it of state.items){
+      // ensure integer arithmetic done precisely
+      const qty = toNumber(it.qty);
+      const rate = toNumber(it.rate);
+      const amt = qty * rate;
+      subtotal += amt;
+    }
+    subtotal = Math.round(subtotal * 100) / 100;
+    const discount = Math.round(toNumber(state.discount) * 100) / 100;
+    const gstPerc = Math.round(toNumber(state.gst) * 100) / 100;
+    const afterDiscount = Math.max(0, subtotal - discount);
+    const gstAmount = Math.round((afterDiscount * gstPerc / 100) * 100) / 100;
+    const grandTotal = Math.round((afterDiscount + gstAmount) * 100) / 100;
+    return { subtotal, discount, gstAmount, grandTotal };
+  }
+
+  function renderItemsTable(){
+    itemsBody.innerHTML = '';
+    state.items.forEach((it, idx) => {
+      const tr = document.createElement('tr');
+      tr.className = 'item-row';
+      const amt = (toNumber(it.qty) * toNumber(it.rate)).toFixed(2);
+      tr.innerHTML = `
+        <td><input data-idx="${idx}" data-field="name" class="item-input" style="border:none;background:transparent" value="${escapeHtml(it.name)}"></td>
+        <td><input data-idx="${idx}" data-field="qty" type="number" min="1" value="${it.qty}" style="width:70px"></td>
+        <td><input data-idx="${idx}" data-field="rate" type="number" min="0" value="${it.rate}" style="width:100px"></td>
+        <td class="right">₹${amt}</td>
+        <td><button class="btn ghost small" data-rem="${idx}" style="padding:6px 8px">Remove</button></td>
+      `;
+      itemsBody.appendChild(tr);
+    });
+
+    // attach listeners for inline edit & remove
+    document.querySelectorAll('.item-input').forEach(inp => {
+      inp.addEventListener('input', (e) => {
+        const idx = Number(e.target.dataset.idx);
+        const field = e.target.dataset.field;
+        state.items[idx][field] = e.target.value;
+        updateAllDisplays();
+      });
+    });
+    document.querySelectorAll('[data-rem]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = Number(e.target.dataset.rem);
+        state.items.splice(idx,1);
+        renderItemsTable();
+        updateAllDisplays();
+      });
+    });
+  }
+
+  function escapeHtml(str){
+    return String(str || '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+  }
+
+  function updatePreviewContent(){
+    p_custName.innerText = state.custName || '-';
+    p_custPhone.innerText = state.custPhone || '-';
+    p_invNo.innerText = state.invNo || invNoInput.value || '-';
+
+    p_items.innerHTML = '';
+    for(const it of state.items){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(it.name)}</td><td style="text-align:right">${toNumber(it.qty)}</td><td style="text-align:right">₹${Number(it.rate).toFixed(2)}</td><td style="text-align:right">₹${(toNumber(it.qty)*toNumber(it.rate)).toFixed(2)}</td>`;
+      p_items.appendChild(tr);
     }
 
-    let total = qty * price;
-    grand += total;
+    const totals = calcTotals();
+    p_subtotal.innerText = '₹' + totals.subtotal.toFixed(2);
+    p_discount.innerText = '₹' + totals.discount.toFixed(2);
+    p_gstAmount.innerText = '₹' + totals.gstAmount.toFixed(2);
+    p_grandTotal.innerText = '₹' + totals.grandTotal.toFixed(2);
 
-    let table = document.getElementById("invoiceTable");
-    let row = table.insertRow();
-    row.insertCell(0).innerHTML = name;
-    row.insertCell(1).innerHTML = qty;
-    row.insertCell(2).innerHTML = price;
-    row.insertCell(3).innerHTML = total;
-    row.insertCell(4).innerHTML = `<span class='edit-btn' onclick='editRow(this)'>Edit</span>`;
-    row.insertCell(5).innerHTML = `<span class='delete-btn' onclick='deleteRow(this)'>X</span>`;
+    subtotalText.innerText = '₹' + totals.subtotal.toFixed(2);
+    gstText.innerText = '₹' + totals.gstAmount.toFixed(2);
+    grandTotalText.innerHTML = '<strong>₹' + totals.grandTotal.toFixed(2) + '</strong>';
+  }
 
-    updateGrandTotal();
+  function updateAllDisplays(){
+    state.invNo = invNoInput.value;
+    state.custName = custNameInput.value;
+    state.custPhone = custPhoneInput.value;
+    state.discount = Number(discountEl.value) || 0;
+    state.gst = Number(gstEl.value) || 0;
+    updatePreviewContent();
+    renderItemsTable();
+  }
 
-    document.getElementById("itemName").value = "";
-    document.getElementById("itemQty").value = "";
-    document.getElementById("itemPrice").value = "";
-}
+  // initial sample item
+  state.items.push({name:'Ambedkar Signature Tee - Black (M)', qty:1, rate:350});
+  state.items.push({name:'Ambedkar Signature Tee - White (L)', qty:1, rate:350});
+  renderItemsTable();
+  updateAllDisplays();
 
-function deleteRow(btn) {
-    let row = btn.parentNode.parentNode;
-    let amount = parseFloat(row.cells[3].innerText);
-    grand -= amount;
-    row.remove();
-    updateGrandTotal();
-}
+  // add item
+  addItemBtn.addEventListener('click', () => {
+    const name = newItemName.value.trim();
+    const qty = Math.max(1, Number(newItemQty.value) || 1);
+    const rate = Math.max(0, Number(newItemRate.value) || 0);
+    if(!name){ alert('Enter item name'); return; }
+    state.items.push({name, qty, rate});
+    newItemName.value = ''; newItemQty.value = 1; newItemRate.value = 350;
+    renderItemsTable();
+    updateAllDisplays();
+  });
 
-function editRow(btn) {
-    let row = btn.parentNode.parentNode;
+  // clear items
+  clearBtn.addEventListener('click', () => {
+    if(!confirm('Clear all items?')) return;
+    state.items = [];
+    renderItemsTable();
+    updateAllDisplays();
+  });
 
-    document.getElementById("itemName").value = row.cells[0].innerText;
-    document.getElementById("itemQty").value = row.cells[1].innerText;
-    document.getElementById("itemPrice").value = row.cells[2].innerText;
+  // live update listeners
+  invNoInput.addEventListener('input', updateAllDisplays);
+  custNameInput.addEventListener('input', updateAllDisplays);
+  custPhoneInput.addEventListener('input', updateAllDisplays);
+  discountEl.addEventListener('input', updateAllDisplays);
+  gstEl.addEventListener('input', updateAllDisplays);
 
-    grand -= parseFloat(row.cells[3].innerText);
-    row.remove();
-    updateGrandTotal();
-}
+  previewBtn.addEventListener('click', () => {
+    updateAllDisplays();
+    // scroll preview into view
+    document.getElementById('invoicePreviewWrap').scrollIntoView({behavior:'smooth'});
+  });
 
-function updateGrandTotal() {
-    document.getElementById("grandTotal").innerText = grand;
-    document.getElementById("totalWords").innerText = numberToWords(grand);
-}
+  // Generate PDF using html2canvas + jsPDF
+  async function generatePdfBlob(){
+    // ensure preview up-to-date
+    updateAllDisplays();
+    const invoiceEl = document.getElementById('invoiceContent');
+    // increase scale for sharper image
+    const canvas = await html2canvas(invoiceEl, {scale:2, backgroundColor: null});
+    const imgData = canvas.toDataURL('image/png', 1.0);
 
-function numberToWords(num) {
-    const words = ["Zero","One","Two","Three","Four","Five","Six","Seven","Eight","Nine"];
-    if (num < 10) return words[num];
-    return num.toLocaleString("en-IN") + " Rupees Only";
-}
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit:'pt', format:'a4' });
+    // A4 size points: 595 x 842 (portrait)
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
 
-function shareWhatsApp() {
-    let custName = document.getElementById("custName").value;
-    let custMobile = document.getElementById("custMobile").value;
-    let billNo = document.getElementById("invoiceNo").innerText;
-    let date = document.getElementById("invoiceDate").innerText;
+    // calculate image fit
+    const imgProps = { width: canvas.width, height: canvas.height };
+    const ratio = Math.min(pageWidth / imgProps.width, pageHeight / imgProps.height);
+    const imgW = imgProps.width * ratio;
+    const imgH = imgProps.height * ratio;
 
-    let table = document.getElementById("invoiceTable");
-    let rows = table.rows;
-    let text = `🧾 *Invoice*  
-Invoice No: ${billNo}  
-Date: ${date}  
-Customer: ${custName}  
-Mobile: ${custMobile}  
+    const x = (pageWidth - imgW) / 2;
+    pdf.addImage(imgData, 'PNG', x, 20, imgW, imgH);
+    const blob = pdf.output('blob');
+    return blob;
+  }
 
-Items:\n`;
-
-    for (let i = 1; i < rows.length; i++) {
-        let item = rows[i].cells[0].innerText;
-        let qty = rows[i].cells[1].innerText;
-        let total = rows[i].cells[3].innerText;
-        text += `• ${item} (x${qty}) – ₹${total}\n`;
+  genPdfBtn.addEventListener('click', async () => {
+    try{
+      genPdfBtn.disabled = true;
+      genPdfBtn.innerText = 'Generating...';
+      const blob = await generatePdfBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const invNoSafe = (state.invNo || invNoInput.value || 'invoice').replace(/\s+/g,'_');
+      a.download = `${invNoSafe}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }catch(err){
+      console.error(err);
+      alert('Failed to generate PDF: ' + err.message);
+    }finally{
+      genPdfBtn.disabled = false;
+      genPdfBtn.innerText = 'Generate & Download PDF';
     }
+  });
 
-    text += `\n*Grand Total: ₹${grand}*`;
-    text += `\n*Total in Words:* ${numberToWords(grand)}`;
+  // Share PDF to WhatsApp via Web Share API (files)
+  shareBtn.addEventListener('click', async () => {
+    try{
+      shareBtn.disabled = true;
+      shareBtn.innerText = 'Preparing...';
+      const blob = await generatePdfBlob();
+      const fileName = ((state.invNo || invNoInput.value || 'invoice').replace(/\s+/g,'_')) + '.pdf';
+      const file = new File([blob], fileName, { type: 'application/pdf' });
 
-    let url = "https://wa.me/?text=" + encodeURIComponent(text);
-    window.open(url, "_blank");
-}
+      // Web Share API with files
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({
+          files: [file],
+          title: 'Invoice',
+          text: `Invoice ${state.invNo || invNoInput.value || ''} • ${p_grandTotal.innerText}`
+        });
+        // after share, user chooses WhatsApp on their device
+      } else if(navigator.share){
+        // some browsers support share but not files; try share with text and prompt user to attach file manually
+        await navigator.share({
+          title: 'Invoice',
+          text: `Invoice ${state.invNo || invNoInput.value || ''} • ${p_grandTotal.innerText}\nPlease attach the downloaded PDF.`
+        });
+        alert('Your browser does not support direct file sharing. The invoice summary text was shared — download the PDF and attach manually in WhatsApp.');
+      } else {
+        alert('Sharing not supported on this device/browser. Use "Open WhatsApp Text" fallback.');
+      }
+    }catch(err){
+      console.error(err);
+      alert('Share failed: ' + (err && err.message ? err.message : err));
+    }finally{
+      shareBtn.disabled = false;
+      shareBtn.innerText = 'Share PDF to WhatsApp (Mobile)';
+    }
+  });
+
+  // Fallback: open wa.me link with prefilled invoice text
+  waTextBtn.addEventListener('click', () => {
+    updateAllDisplays();
+    const phoneRaw = (custPhoneInput.value || '').replace(/\D/g,'');
+    const target = phoneRaw ? `https://wa.me/${phoneRaw}` : `https://wa.me/`;
+    // Build printable text
+    const totals = calcTotals();
+    let msg = `Invoice: ${state.invNo || invNoInput.value || '-'}%0A`;
+    msg += `Date: ${formatDate(new Date())}%0A`;
+    if(state.custName) msg += `Customer: ${encodeURIComponent(state.custName)}%0A`;
+    msg += `%0AItems:%0A`;
+    for(const it of state.items){
+      const line = `${it.name} x${it.qty} @₹${Number(it.rate).toFixed(2)} = ₹${(toNumber(it.qty)*toNumber(it.rate)).toFixed(2)}`;
+      msg += encodeURIComponent(line) + `%0A`;
+    }
+    msg += `%0ASubtotal: ₹${totals.subtotal.toFixed(2)}%0A`;
+    msg += `Discount: ₹${totals.discount.toFixed(2)}%0A`;
+    msg += `GST: ₹${totals.gstAmount.toFixed(2)}%0A`;
+    msg += `Grand Total: ₹${totals.grandTotal.toFixed(2)}%0A`;
+    msg += `%0APayment: UPI / Cash`;
+    const url = `${target}?text=${msg}`;
+    window.open(url, '_blank');
+  });
+
+})();
 </script>
-
 </body>
 </html>
