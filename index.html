@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Invoice Generator</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        input { padding: 8px; margin: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        #btn { padding: 10px 15px; background: black; color: white; border: none; cursor: pointer; margin-top: 20px; }
+        .delete-btn { color: red; cursor: pointer; font-weight: bold; }
+        .edit-btn { color: blue; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<h2 id="shopName">Technogan Web Services</h2>
+
+<h3>Customer Details</h3>
+<input type="text" id="custName" placeholder="Customer Name">
+<input type="text" id="custMobile" placeholder="Mobile Number">
+
+<h4>Invoice No: <span id="invoiceNo"></span></h4>
+<h4>Date: <span id="invoiceDate"></span></h4>
+
+<hr>
+
+<input type="text" id="itemName" placeholder="Item Name">
+<input type="number" id="itemQty" placeholder="Qty">
+<input type="number" id="itemPrice" placeholder="Price">
+
+<button onclick="addItem()">Add</button>
+
+<table id="invoiceTable">
+    <tr>
+        <th>Item</th>
+        <th>Qty</th>
+        <th>Price</th>
+        <th>Total</th>
+        <th>Edit</th>
+        <th>Delete</th>
+    </tr>
+</table>
+
+<h3>Grand Total: ₹ <span id="grandTotal">0</span></h3>
+<h4>Total (in words): <span id="totalWords"></span></h4>
+
+<button id="btn" onclick="shareWhatsApp()">Share on WhatsApp</button>
+
+<script>
+let grand = 0;
+
+// Invoice number + date
+document.getElementById("invoiceNo").innerText = Math.floor(Math.random()*90000+10000);
+document.getElementById("invoiceDate").innerText = new Date().toLocaleDateString();
+
+function addItem() {
+    let name = document.getElementById("itemName").value;
+    let qty = document.getElementById("itemQty").value;
+    let price = document.getElementById("itemPrice").value;
+
+    if (!name || !qty || !price) {
+        alert("Please fill all fields");
+        return;
+    }
+
+    let total = qty * price;
+    grand += total;
+
+    let table = document.getElementById("invoiceTable");
+    let row = table.insertRow();
+    row.insertCell(0).innerHTML = name;
+    row.insertCell(1).innerHTML = qty;
+    row.insertCell(2).innerHTML = price;
+    row.insertCell(3).innerHTML = total;
+    row.insertCell(4).innerHTML = `<span class='edit-btn' onclick='editRow(this)'>Edit</span>`;
+    row.insertCell(5).innerHTML = `<span class='delete-btn' onclick='deleteRow(this)'>X</span>`;
+
+    updateGrandTotal();
+
+    document.getElementById("itemName").value = "";
+    document.getElementById("itemQty").value = "";
+    document.getElementById("itemPrice").value = "";
+}
+
+function deleteRow(btn) {
+    let row = btn.parentNode.parentNode;
+    let amount = parseFloat(row.cells[3].innerText);
+    grand -= amount;
+    row.remove();
+    updateGrandTotal();
+}
+
+function editRow(btn) {
+    let row = btn.parentNode.parentNode;
+
+    document.getElementById("itemName").value = row.cells[0].innerText;
+    document.getElementById("itemQty").value = row.cells[1].innerText;
+    document.getElementById("itemPrice").value = row.cells[2].innerText;
+
+    grand -= parseFloat(row.cells[3].innerText);
+    row.remove();
+    updateGrandTotal();
+}
+
+function updateGrandTotal() {
+    document.getElementById("grandTotal").innerText = grand;
+    document.getElementById("totalWords").innerText = numberToWords(grand);
+}
+
+function numberToWords(num) {
+    const words = ["Zero","One","Two","Three","Four","Five","Six","Seven","Eight","Nine"];
+    if (num < 10) return words[num];
+    return num.toLocaleString("en-IN") + " Rupees Only";
+}
+
+function shareWhatsApp() {
+    let custName = document.getElementById("custName").value;
+    let custMobile = document.getElementById("custMobile").value;
+    let billNo = document.getElementById("invoiceNo").innerText;
+    let date = document.getElementById("invoiceDate").innerText;
+
+    let table = document.getElementById("invoiceTable");
+    let rows = table.rows;
+    let text = `🧾 *Invoice*  
+Invoice No: ${billNo}  
+Date: ${date}  
+Customer: ${custName}  
+Mobile: ${custMobile}  
+
+Items:\n`;
+
+    for (let i = 1; i < rows.length; i++) {
+        let item = rows[i].cells[0].innerText;
+        let qty = rows[i].cells[1].innerText;
+        let total = rows[i].cells[3].innerText;
+        text += `• ${item} (x${qty}) – ₹${total}\n`;
+    }
+
+    text += `\n*Grand Total: ₹${grand}*`;
+    text += `\n*Total in Words:* ${numberToWords(grand)}`;
+
+    let url = "https://wa.me/?text=" + encodeURIComponent(text);
+    window.open(url, "_blank");
+}
+</script>
+
+</body>
+</html>
